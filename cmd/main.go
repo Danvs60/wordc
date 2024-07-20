@@ -53,7 +53,6 @@ func main() {
 
 	content := buf.String()
 	// Process content as needed
-	_ = content // Placeholder to prevent "declared and not used" error
 	if !(*byteSize || *lineCount || *wordCount || *characterCount) {
 		*wordCount = true
 		*byteSize = true
