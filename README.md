@@ -23,7 +23,7 @@ wordc [flags] [file]
 
 - `-c`: Count bytes in the file.
 - `-l`: Count lines in the file.
-- `-w : Count words in the file.
+- `-w` : Count words in the file.
 - `-m`: Count characters in the file.
 
 ## Examples
