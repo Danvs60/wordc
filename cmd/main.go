@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"unicode/utf8"
 )
 
+const maxFileSize = 100 * 1024 * 1024 // 100 MB
+
 func main() {
 	// Define flags
 	byteSize := flag.Bool("c", false, "Count bytes in file.")
@@ -17,14 +20,30 @@ func main() {
 	wordCount := flag.Bool("w", false, "Count words in file.")
 	characterCount := flag.Bool("m", false, "Count words in file.")
 
-	var filePath string
-
 	// Parse command-line flags
 	flag.Parse()
+	// Use all if user does not set any
+	if !(*byteSize || *lineCount || *wordCount || *characterCount) {
+		*wordCount = true
+		*byteSize = true
+		*lineCount = true
+		*characterCount = true
+	}
 
+	var filePath string
 	var file io.Reader
 	if len(flag.Args()) > 0 {
 		filePath := flag.Arg(0)
+
+		// ensure input is of reasonable size
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if fileInfo.Size() > maxFileSize {
+			log.Fatalf("The file size limit is %v MB", maxFileSize/(1024*1024))
+		}
+
 		f, err := os.Open(filePath)
 		if err != nil {
 			log.Fatalf("Error opening file %s: %v", filePath, err)
@@ -37,43 +56,65 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error getting stdin stat: %v", err)
 		}
+
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
 			file = os.Stdin
+
+			// ensure input is of reasonable size
+			if stat.Size() > maxFileSize {
+				log.Fatalf("The file size limit is %v MB", maxFileSize/(1024*1024))
+			}
 		} else {
 			log.Fatal("No input file specified and stdin is a terminal")
 		}
 	}
 
-	// Read content from the file or stdin into a buffer
-	var buf strings.Builder
-	_, err := io.Copy(&buf, file)
-	if err != nil {
-		log.Fatalf("Error reading from input: %v", err)
-	}
+	reader := bufio.NewReader(file)
 
-	content := buf.String()
-	// Process content as needed
-	if !(*byteSize || *lineCount || *wordCount || *characterCount) {
-		*wordCount = true
-		*byteSize = true
-		*lineCount = true
-		*characterCount = true
+	var byteSizeOut, lineCountOut, wordCountOut, characterCountOut int
+	for {
+		line, err := reader.ReadString('\n')
+
+		if err != nil {
+			if err == io.EOF {
+				if line != "" {
+					lineCountOut++
+					bc, wc, cc := getLineCounters(line)
+					byteSizeOut += bc
+					wordCountOut += wc
+					characterCountOut += cc
+				}
+				break
+			}
+			log.Fatalf("Error reading line %v", err)
+		}
+		lineCountOut++
+		bc, wc, cc := getLineCounters(line)
+		byteSizeOut += bc
+		wordCountOut += wc
+		characterCountOut += cc
 	}
 
 	var output string
-	// process flags
 	if *byteSize {
-		output += fmt.Sprintf("%v ", len(content))
+		output += fmt.Sprintf("%v ", byteSizeOut)
 	}
 	if *lineCount {
-		output += fmt.Sprintf("%v ", strings.Count(content, "\n"))
+		output += fmt.Sprintf("%v ", lineCountOut)
 	}
 	if *wordCount {
-		output += fmt.Sprintf("%v ", len(strings.Fields(content)))
+		output += fmt.Sprintf("%v ", wordCountOut)
 	}
 	if *characterCount {
-		output += fmt.Sprintf("%v ", utf8.RuneCountInString(content))
+		output += fmt.Sprintf("%v ", characterCountOut)
 	}
 
 	fmt.Printf("\t %s %s\n", output, filePath)
+}
+
+func getLineCounters(line string) (byteSize, wordCount, characterCount int) {
+	byteSize = len(line)
+	wordCount = len(strings.Fields(line))
+	characterCount = utf8.RuneCountInString(line)
+	return
 }
